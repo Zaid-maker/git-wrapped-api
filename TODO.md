@@ -8,7 +8,7 @@
 - [ ] Add export functionality (PDF, Image, Social Share)
 
 ## User Experience
-- [ ] Add loading skeleton animations
+- [x] Add loading skeleton animations
 - [ ] Implement dark/light theme toggle
 - [ ] Add tooltips for stat explanations
 - [ ] Add mobile-optimized view

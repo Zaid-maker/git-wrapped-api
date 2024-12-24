@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useState } from "react";
 import dynamic from "next/dynamic";
 import ContributionGraph from "./components/ContributionGraph";
+import LoadingSkeleton from "./components/LoadingSkeleton";
 
 const ReactJson = dynamic(() => import("react-json-view"), { ssr: false });
 
@@ -187,7 +188,8 @@ export default function Home() {
 
             {/* Right Column - Results */}
             <div className="md:col-span-3 relative min-h-[400px] flex items-center justify-center">
-              {!stats && !loading && (
+              {loading && <LoadingSkeleton />}
+              {!loading && !stats && (
                 <div className="w-full h-full text-center flex items-center justify-center bg-gray-800/30 border border-purple-500/20 rounded-lg backdrop-blur-sm">
                   <div className="space-y-4 p-8">
                     <div className="w-16 h-16 mx-auto bg-gradient-to-r from-purple-500/20 to-pink-500/20 rounded-full flex items-center justify-center">
@@ -217,7 +219,7 @@ export default function Home() {
                   </div>
                 </div>
               )}
-              {stats && (
+              {!loading && stats && (
                 <div className="w-full h-full bg-gray-800/30 border border-purple-500/20 rounded-lg backdrop-blur-sm">
                   <div className="p-4 border-b border-purple-500/20">
                     <h2 className="text-lg font-medium text-transparent bg-clip-text bg-gradient-to-r from-purple-200 to-pink-200">
