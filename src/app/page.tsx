@@ -29,6 +29,10 @@ interface Repository {
   name: string;
   stars: number;
   languages: string[];
+  isPrivate: boolean;
+  description: string;
+  url: string;
+  updatedAt: string;
 }
 
 interface NetworkStats {
@@ -373,15 +377,32 @@ export default function Home() {
                       <h3 className="text-lg font-medium">Repositories</h3>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {stats.repositories.map((repo, index) => (
-                          <div
+                          <a
+                            href={repo.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
                             key={repo.name + index}
-                            className="bg-gray-800/50 rounded-lg p-4"
+                            className="bg-gray-800/50 rounded-lg p-4 hover:bg-gray-700/50 transition-colors group"
                           >
-                            <h4 className="font-medium">{repo.name}</h4>
-                            <div className="text-sm text-gray-400">
-                              ⭐ {repo.stars || 0} stars
+                            <div className="flex items-center justify-between mb-2">
+                              <h4 className="font-medium group-hover:text-cyan-300 transition-colors flex items-center gap-2">
+                                {repo.name}
+                                {repo.isPrivate && (
+                                  <span className="text-xs px-2 py-1 rounded-full bg-yellow-500/10 text-yellow-300 border border-yellow-500/20">
+                                    Private
+                                  </span>
+                                )}
+                              </h4>
+                              <div className="text-sm text-gray-400">
+                                ⭐ {repo.stars}
+                              </div>
                             </div>
-                            <div className="mt-2 flex flex-wrap gap-2">
+                            {repo.description && (
+                              <p className="text-sm text-gray-400 mb-3 line-clamp-2">
+                                {repo.description}
+                              </p>
+                            )}
+                            <div className="flex flex-wrap gap-2">
                               {repo.languages.map((lang) => (
                                 <span
                                   key={lang}
@@ -391,7 +412,10 @@ export default function Home() {
                                 </span>
                               ))}
                             </div>
-                          </div>
+                            <div className="mt-3 text-xs text-gray-500">
+                              Updated {new Date(repo.updatedAt).toLocaleDateString()}
+                            </div>
+                          </a>
                         ))}
                       </div>
                       {/* Infinite Scroll Trigger */}

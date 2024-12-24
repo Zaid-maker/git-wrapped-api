@@ -34,6 +34,20 @@ const PER_PAGE = 30; // Number of items per page
 const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
+async function fetchRepoLanguages(owner: string, repo: string) {
+  try {
+    const languages = await octokit.repos.listLanguages({
+      owner,
+      repo,
+    });
+    return Object.keys(languages.data);
+  } catch (error: any) {
+    // If repository access is blocked or any other error occurs, return empty array
+    console.warn(`Could not fetch languages for ${owner}/${repo}:`, error.message);
+    return [];
+  }
+}
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -173,15 +187,16 @@ export async function GET(request: Request) {
 
       const repoStats = await Promise.all(
         repos.data.map(async (repo) => {
-          const languages = await octokit.repos.listLanguages({
-            owner: repo.owner.login,
-            repo: repo.name,
-          });
-
+          const languages = await fetchRepoLanguages(repo.owner.login, repo.name);
+          
           return {
             name: repo.name,
-            stars: repo.stargazers_count,
-            languages: Object.keys(languages.data),
+            stars: repo.stargazers_count ?? 0,
+            languages,
+            isPrivate: repo.private ?? false,
+            description: repo.description || '',
+            url: repo.html_url,
+            updatedAt: repo.updated_at,
           };
         })
       );
