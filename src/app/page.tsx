@@ -373,6 +373,54 @@ export default function Home() {
                       </div>
                     </div>
                   )}
+
+                  {/* Network Rankings Link */}
+                  <Link
+                    href={`/leaderboards?username=${username}`}
+                    className="block bg-gray-900/50 rounded-lg p-4 backdrop-blur-sm border border-gray-700/50 hover:border-purple-500/20 transition-colors group"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-gradient-to-r from-purple-500/10 to-pink-500/10 flex items-center justify-center">
+                          <svg className="w-5 h-5 text-gray-400 group-hover:text-purple-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                          </svg>
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-medium text-gray-300 group-hover:text-white">View Network Rankings</h3>
+                          <p className="text-xs text-gray-400">Compare stats with followers and following</p>
+                        </div>
+                      </div>
+                      <svg className="w-5 h-5 text-gray-400 group-hover:text-purple-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </div>
+                  </Link>
+
+                  {/* Stats JSON View */}
+                  <div className="overflow-hidden rounded-lg bg-gray-900/50 backdrop-blur-sm">
+                    <Tooltip content="Complete data response from the API in JSON format" position="below" showArrow={false}>
+                      <div className="p-4 border-b border-gray-700/50 cursor-help">
+                        <h3 className="text-sm font-medium text-gray-300">Raw Data</h3>
+                      </div>
+                    </Tooltip>
+                    <div className="p-4">
+                      <ReactJson
+                        src={stats}
+                        theme="tomorrow"
+                        style={{
+                          backgroundColor: "transparent",
+                          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+                          fontSize: "0.875rem",
+                        }}
+                        enableClipboard={false}
+                        displayDataTypes={false}
+                        displayObjectSize={false}
+                        collapsed={1}
+                        name={false}
+                      />
+                    </div>
+                  </div>
                 </div>
               )}
 
