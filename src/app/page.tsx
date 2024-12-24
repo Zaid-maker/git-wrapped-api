@@ -7,6 +7,7 @@ import ContributionGraph from "./components/ContributionGraph";
 import LoadingSkeleton from "./components/LoadingSkeleton";
 import Tooltip from "./components/Tooltip";
 import StatBadge from "./components/StatBadge";
+import Leaderboard from "./components/Leaderboard";
 
 const ReactJson = dynamic(() => import("react-json-view"), { ssr: false });
 
@@ -14,6 +15,13 @@ interface ContributionDay {
   contributionCount: number;
   date: string;
   weekday: number;
+}
+
+interface LeaderboardEntry {
+  username: string;
+  value: number;
+  rank: number;
+  avatarUrl: string;
 }
 
 interface GitHubStats {
@@ -31,6 +39,11 @@ interface GitHubStats {
   };
   starsEarned: number;
   topLanguages: string[];
+  leaderboards: {
+    commits: LeaderboardEntry[];
+    streak: LeaderboardEntry[];
+    stars: LeaderboardEntry[];
+  };
 }
 
 export default function Home() {
@@ -332,6 +345,42 @@ export default function Home() {
                           label="Commit Rank"
                           value={stats.commitRank}
                           color="blue"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Leaderboards */}
+                    <div className="bg-gray-900/50 rounded-lg p-4 backdrop-blur-sm">
+                      <div className="flex items-center justify-between mb-4">
+                        <Tooltip content="Compare stats with your followers and following" position="below" showArrow={false}>
+                          <h3 className="text-sm font-medium text-gray-300 cursor-help">
+                            Network Rankings
+                          </h3>
+                        </Tooltip>
+                        <Tooltip content="Rankings based on your network (you, followers, following)" position="below" showArrow={false}>
+                          <div className="text-xs text-gray-400 cursor-help flex items-center gap-1">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                            </svg>
+                            Network Rankings
+                          </div>
+                        </Tooltip>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <Leaderboard
+                          title="Total Commits"
+                          entries={stats.leaderboards.commits}
+                          metric="commits"
+                        />
+                        <Leaderboard
+                          title="Longest Streak"
+                          entries={stats.leaderboards.streak}
+                          metric="days"
+                        />
+                        <Leaderboard
+                          title="GitHub Stars"
+                          entries={stats.leaderboards.stars}
+                          metric="stars"
                         />
                       </div>
                     </div>

@@ -18,6 +18,13 @@ interface ContributionDay {
   weekday: number;
 }
 
+interface LeaderboardEntry {
+  username: string;
+  value: number;
+  rank: number;
+  avatarUrl: string;
+}
+
 interface GitHubStats {
   longestStreak: number;
   totalCommits: number;
@@ -33,6 +40,11 @@ interface GitHubStats {
   };
   starsEarned: number;
   topLanguages: string[];
+  leaderboards: {
+    commits: LeaderboardEntry[];
+    streak: LeaderboardEntry[];
+    stars: LeaderboardEntry[];
+  };
 }
 
 /**
@@ -88,7 +100,6 @@ const MONTH_NAMES = [
  */
 export async function GET(request: Request): Promise<NextResponse> {
   try {
-    // Extract username from query parameters
     const { searchParams } = new URL(request.url);
     const username = searchParams.get("username");
 
@@ -99,10 +110,11 @@ export async function GET(request: Request): Promise<NextResponse> {
       );
     }
 
-    // GraphQL query to fetch user's GitHub data
+    // GraphQL query for main user data
     const query = `
       query($username: String!) {
         user(login: $username) {
+          avatarUrl
           contributionsCollection {
             contributionCalendar {
               totalContributions
@@ -127,10 +139,77 @@ export async function GET(request: Request): Promise<NextResponse> {
       }
     `;
 
+    // Fetch main user data using GraphQL
     const graphqlResponse = (await octokit.graphql(query, { username })) as any;
     const userData = graphqlResponse.user;
 
-    // Process contribution data for the current year
+    // Fetch followers and following using REST API
+    const [followersResponse, followingResponse] = await Promise.all([
+      octokit.rest.users.listFollowersForUser({ username, per_page: 3 }),
+      octokit.rest.users.listFollowingForUser({ username, per_page: 3 })
+    ]);
+
+    // Fetch additional data for network users
+    const networkUsers = [
+      {
+        login: username,
+        avatarUrl: userData.avatarUrl,
+        contributionsCollection: userData.contributionsCollection,
+        repositories: userData.repositories,
+      }
+    ];
+
+    // Process followers and following data
+    const networkLogins = [...followersResponse.data, ...followingResponse.data]
+      .map(user => user.login)
+      .filter((login, index, self) => self.indexOf(login) === index); // Remove duplicates
+
+    // Fetch data for each network user
+    const networkUsersData = (await Promise.all(
+      networkLogins.map(async (login) => {
+        try {
+          const userQuery = `
+            query($login: String!) {
+              user(login: $login) {
+                avatarUrl
+                contributionsCollection {
+                  contributionCalendar {
+                    totalContributions
+                    weeks {
+                      contributionDays {
+                        contributionCount
+                        date
+                        weekday
+                      }
+                    }
+                  }
+                }
+                repositories(first: 100, orderBy: {field: STARGAZERS, direction: DESC}) {
+                  nodes {
+                    stargazerCount
+                  }
+                }
+              }
+            }
+          `;
+          const response = (await octokit.graphql(userQuery, { login })) as any;
+          return {
+            login,
+            avatarUrl: response.user.avatarUrl,
+            contributionsCollection: response.user.contributionsCollection,
+            repositories: response.user.repositories,
+          };
+        } catch (error) {
+          console.error(`Error fetching data for user ${login}:`, error);
+          return null;
+        }
+      })
+    )).filter((data): data is NonNullable<typeof data> => data !== null);
+
+    // Add valid network users data
+    networkUsers.push(...networkUsersData);
+
+    // Process contribution data and other stats as before
     const contributionDays =
       userData.contributionsCollection.contributionCalendar.weeks
         .flatMap((week: any) => week.contributionDays)
@@ -196,18 +275,67 @@ export async function GET(request: Request): Promise<NextResponse> {
       }
     }
 
-    const totalCommits =
-      userData.contributionsCollection.contributionCalendar.totalContributions;
+    const leaderboards = {
+      commits: networkUsers
+        .map((user) => ({
+          username: user.login,
+          value: user.contributionsCollection.contributionCalendar.totalContributions,
+          avatarUrl: user.avatarUrl,
+          rank: 0,
+        }))
+        .sort((a, b) => b.value - a.value)
+        .map((entry, index) => ({ ...entry, rank: index + 1 })),
+
+      streak: networkUsers
+        .map((user) => {
+          let maxStreak = 0;
+          let currentStreak = 0;
+          const days = user.contributionsCollection?.contributionCalendar?.weeks
+            ?.flatMap((week: any) => week.contributionDays)
+            ?.filter((day: any) => new Date(day.date) >= new Date("2024-01-01")) || [];
+
+          days.forEach((day: any) => {
+            if (day.contributionCount > 0) {
+              currentStreak++;
+              maxStreak = Math.max(maxStreak, currentStreak);
+            } else {
+              currentStreak = 0;
+            }
+          });
+
+          return {
+            username: user.login,
+            value: maxStreak,
+            avatarUrl: user.avatarUrl,
+            rank: 0,
+          };
+        })
+        .sort((a, b) => b.value - a.value)
+        .map((entry, index) => ({ ...entry, rank: index + 1 })),
+
+      stars: networkUsers
+        .map((user) => ({
+          username: user.login,
+          value: user.repositories.nodes.reduce(
+            (acc: number, repo: any) => acc + (repo.stargazerCount || 0),
+            0
+          ),
+          avatarUrl: user.avatarUrl,
+          rank: 0,
+        }))
+        .sort((a, b) => b.value - a.value)
+        .map((entry, index) => ({ ...entry, rank: index + 1 })),
+    };
 
     // Prepare and return the final statistics
     const stats: GitHubStats = {
       longestStreak: maxStreak,
-      totalCommits,
-      commitRank: getCommitRank(totalCommits),
+      totalCommits: userData.contributionsCollection.contributionCalendar.totalContributions,
+      commitRank: getCommitRank(userData.contributionsCollection.contributionCalendar.totalContributions),
       calendarData: contributionDays,
       mostActiveDay: {
         name: WEEKDAY_NAMES[parseInt(mostActiveDay[0])],
-        commits: Math.round(mostActiveDay[1] / (contributionDays.length / 7)), // Average per day
+        commits: Math.round(mostActiveDay[1] / (contributionDays.length / 7)),
       },
       mostActiveMonth: {
         name: MONTH_NAMES[parseInt(mostActiveMonth[0]) - 1],
@@ -215,6 +343,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       },
       starsEarned: totalStars,
       topLanguages,
+      leaderboards,
     };
 
     return NextResponse.json(stats);

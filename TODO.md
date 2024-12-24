@@ -32,7 +32,7 @@
 - [ ] Add comparison with other users
 - [x] Implement shareable badges
 - [ ] Add team/organization statistics
-- [ ] Create leaderboards
+- [x] Create leaderboards
 - [ ] Add collaboration network visualization
 
 ## Technical Improvements
