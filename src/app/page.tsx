@@ -3,12 +3,36 @@
 import Image from "next/image";
 import { useState } from "react";
 import dynamic from "next/dynamic";
+import ContributionGraph from "./components/ContributionGraph";
 
 const ReactJson = dynamic(() => import("react-json-view"), { ssr: false });
 
+interface ContributionDay {
+  contributionCount: number;
+  date: string;
+  weekday: number;
+}
+
+interface GitHubStats {
+  longestStreak: number;
+  totalCommits: number;
+  commitRank: string;
+  calendarData: ContributionDay[];
+  mostActiveDay: {
+    name: string;
+    commits: number;
+  };
+  mostActiveMonth: {
+    name: string;
+    commits: number;
+  };
+  starsEarned: number;
+  topLanguages: string[];
+}
+
 export default function Home() {
   const [username, setUsername] = useState("");
-  const [stats, setStats] = useState(null);
+  const [stats, setStats] = useState<GitHubStats | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -200,22 +224,76 @@ export default function Home() {
                       Results for @{username}
                     </h2>
                   </div>
-                  <div className="p-4 overflow-auto max-h-[600px] rounded-lg">
-                    <ReactJson
-                      src={stats}
-                      theme="tomorrow"
-                      style={{
-                        backgroundColor: "transparent",
-                        fontFamily:
-                          'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-                        fontSize: "0.875rem",
-                      }}
-                      enableClipboard={false}
-                      displayDataTypes={false}
-                      displayObjectSize={false}
-                      collapsed={1}
-                      name={false}
-                    />
+                  <div className="p-4 space-y-8">
+                    {/* Quick Stats */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="bg-gray-900/50 rounded-lg p-4 backdrop-blur-sm">
+                        <div className="text-sm text-gray-400">Total Commits</div>
+                        <div className="text-2xl font-bold text-white">{stats.totalCommits}</div>
+                      </div>
+                      <div className="bg-gray-900/50 rounded-lg p-4 backdrop-blur-sm">
+                        <div className="text-sm text-gray-400">Longest Streak</div>
+                        <div className="text-2xl font-bold text-white">{stats.longestStreak} days</div>
+                      </div>
+                      <div className="bg-gray-900/50 rounded-lg p-4 backdrop-blur-sm">
+                        <div className="text-sm text-gray-400">Stars Earned</div>
+                        <div className="text-2xl font-bold text-white">{stats.starsEarned}</div>
+                      </div>
+                      <div className="bg-gray-900/50 rounded-lg p-4 backdrop-blur-sm">
+                        <div className="text-sm text-gray-400">Commit Rank</div>
+                        <div className="text-2xl font-bold text-white">{stats.commitRank}</div>
+                      </div>
+                    </div>
+
+                    {/* Contribution Graph */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-medium text-gray-300">Contribution Activity</h3>
+                        <div className="text-xs text-gray-400">
+                          Most active: {stats.mostActiveDay.name} ({stats.mostActiveDay.commits} commits/day)
+                        </div>
+                      </div>
+                      <ContributionGraph data={stats.calendarData} />
+                    </div>
+
+                    {/* Top Languages */}
+                    <div className="bg-gray-900/50 rounded-lg p-4 backdrop-blur-sm">
+                      <h3 className="text-sm font-medium text-gray-300 mb-3">Top Languages</h3>
+                      <div className="flex flex-wrap gap-2">
+                        {stats.topLanguages.map((lang) => (
+                          <span
+                            key={lang}
+                            className="px-3 py-1 rounded-full text-xs font-medium bg-purple-500/10 text-purple-200 border border-purple-500/20"
+                          >
+                            {lang}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Stats JSON View */}
+                    <div className="overflow-auto max-h-[400px] rounded-lg bg-gray-900/50 backdrop-blur-sm">
+                      <div className="p-4 border-b border-gray-700/50">
+                        <h3 className="text-sm font-medium text-gray-300">Raw Data</h3>
+                      </div>
+                      <div className="p-4">
+                        <ReactJson
+                          src={stats}
+                          theme="tomorrow"
+                          style={{
+                            backgroundColor: "transparent",
+                            fontFamily:
+                              'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+                            fontSize: "0.875rem",
+                          }}
+                          enableClipboard={false}
+                          displayDataTypes={false}
+                          displayObjectSize={false}
+                          collapsed={1}
+                          name={false}
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
