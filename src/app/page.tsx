@@ -25,16 +25,6 @@ interface LeaderboardEntry {
   avatarUrl: string;
 }
 
-interface Repository {
-  name: string;
-  stars: number;
-  languages: string[];
-  isPrivate: boolean;
-  description: string;
-  url: string;
-  updatedAt: string;
-}
-
 interface NetworkStats {
   username: string;
   avatarUrl: string;
@@ -66,14 +56,12 @@ interface Stats {
     commits: number;
   };
   calendarData?: ContributionDay[];
-  repositories?: Repository[];
   networkStats?: NetworkStats;
 }
 
 interface ApiResponse {
   stats?: Partial<Stats>;
   calendarData?: ContributionDay[];
-  repositories?: Repository[];
   networkStats?: NetworkStats;
   hasMore?: boolean;
   nextPage?: number;
@@ -86,19 +74,16 @@ export default function Home() {
   const [loading, setLoading] = useState<Record<string, boolean>>({
     initial: false,
     contributions: false,
-    repositories: false,
     network: false,
   });
   const [error, setError] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
 
-  const loadData = async (type: string, page: number = 1) => {
+  const loadData = async (type: string) => {
     setLoading(prev => ({ ...prev, [type]: true }));
     setError("");
 
     try {
-      const response = await fetch(`/api/stats?username=${username}&loadType=${type}&page=${page}`);
+      const response = await fetch(`/api/stats?username=${username}&loadType=${type}`);
       const data: ApiResponse = await response.json();
 
       if (!response.ok) {
@@ -111,7 +96,6 @@ export default function Home() {
             setStats(data as Stats);
             // After loading basic stats, load other data types
             loadData('contributions');
-            loadData('repositories');
             loadData('network');
           }
           break;
@@ -121,21 +105,6 @@ export default function Home() {
             ...data.stats,
             calendarData: data.calendarData,
           }));
-          break;
-        case 'repositories':
-          if (page === 1) {
-            setStats((prev: Stats | null) => prev && ({
-              ...prev,
-              repositories: data.repositories || [],
-            }));
-          } else {
-            setStats((prev: Stats | null) => prev && ({
-              ...prev,
-              repositories: [...(prev.repositories || []), ...(data.repositories || [])],
-            }));
-          }
-          setHasMore(!!data.hasMore);
-          setCurrentPage(data.nextPage || page + 1);
           break;
         case 'network':
           if (data.networkStats) {
@@ -156,37 +125,8 @@ export default function Home() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setStats(null);
-    setCurrentPage(1);
-    setHasMore(true);
     await loadData('initial');
   };
-
-  const loadMoreRepositories = () => {
-    if (!loading.repositories && hasMore) {
-      loadData('repositories', currentPage);
-    }
-  };
-
-  // Intersection Observer for infinite scrolling
-  useEffect(() => {
-    if (!stats?.repositories?.length) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && hasMore && !loading.repositories) {
-          loadMoreRepositories();
-        }
-      },
-      { threshold: 0.5 }
-    );
-
-    const loadMoreTrigger = document.getElementById('load-more-trigger');
-    if (loadMoreTrigger) {
-      observer.observe(loadMoreTrigger);
-    }
-
-    return () => observer.disconnect();
-  }, [stats?.repositories, hasMore, loading.repositories]);
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-800 text-gray-100">
@@ -371,67 +311,31 @@ export default function Home() {
                     </div>
                   )}
 
-                  {/* Repository List */}
-                  {stats?.repositories && stats.repositories.length > 0 && (
-                    <div className="space-y-4">
-                      <h3 className="text-lg font-medium">Repositories</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {stats.repositories.map((repo, index) => (
-                          <a
-                            href={repo.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            key={repo.name + index}
-                            className="bg-gray-800/50 rounded-lg p-4 hover:bg-gray-700/50 transition-colors group"
-                          >
-                            <div className="flex items-center justify-between mb-2">
-                              <h4 className="font-medium group-hover:text-cyan-300 transition-colors flex items-center gap-2">
-                                {repo.name}
-                                {repo.isPrivate && (
-                                  <span className="text-xs px-2 py-1 rounded-full bg-yellow-500/10 text-yellow-300 border border-yellow-500/20">
-                                    Private
-                                  </span>
-                                )}
-                              </h4>
-                              <div className="text-sm text-gray-400">
-                                ⭐ {repo.stars}
-                              </div>
-                            </div>
-                            {repo.description && (
-                              <p className="text-sm text-gray-400 mb-3 line-clamp-2">
-                                {repo.description}
-                              </p>
-                            )}
-                            <div className="flex flex-wrap gap-2">
-                              {repo.languages.map((lang) => (
-                                <span
-                                  key={lang}
-                                  className="px-2 py-1 text-xs rounded-full bg-purple-500/10 text-purple-200"
-                                >
-                                  {lang}
-                                </span>
-                              ))}
-                            </div>
-                            <div className="mt-3 text-xs text-gray-500">
-                              Updated {new Date(repo.updatedAt).toLocaleDateString()}
-                            </div>
-                          </a>
-                        ))}
+                  {/* Repositories Link */}
+                  <Link
+                    href={`/repositories?username=${username}`}
+                    className="block bg-gray-900/50 rounded-lg p-4 backdrop-blur-sm border border-gray-700/50 hover:border-purple-500/20 transition-colors group"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-gradient-to-r from-purple-500/10 to-pink-500/10 flex items-center justify-center">
+                          <svg className="w-5 h-5 text-gray-400 group-hover:text-purple-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                          </svg>
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-medium text-gray-300 group-hover:text-white">View All Repositories</h3>
+                          <p className="text-xs text-gray-400">Browse and filter repositories by language</p>
+                        </div>
                       </div>
-                      {/* Infinite Scroll Trigger */}
-                      <div
-                        id="load-more-trigger"
-                        className="h-10 flex items-center justify-center"
-                      >
-                        {loading.repositories && (
-                          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-purple-500" />
-                        )}
-                      </div>
+                      <svg className="w-5 h-5 text-gray-400 group-hover:text-purple-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
                     </div>
-                  )}
+                  </Link>
 
                   {/* Network Stats */}
-                  {stats?.networkStats && (
+                  {stats.networkStats && (
                     <div className="space-y-4">
                       <div className="flex items-center justify-between">
                         <Tooltip content="Your network stats" position="below" showArrow={false}>
