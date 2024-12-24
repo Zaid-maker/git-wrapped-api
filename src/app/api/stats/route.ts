@@ -201,6 +201,113 @@ export async function GET(request: Request) {
       });
     }
 
+    // Contribution data load
+    if (loadType === 'contributions') {
+      const contributionData = await octokit.graphql<ContributionData>(`
+        query($username: String!) {
+          user(login: $username) {
+            contributionsCollection {
+              contributionCalendar {
+                totalContributions
+                weeks {
+                  contributionDays {
+                    contributionCount
+                    date
+                  }
+                }
+              }
+            }
+          }
+        }
+      `, { username });
+
+      const calendar = contributionData.user.contributionsCollection.contributionCalendar;
+      const contributionDays = calendar.weeks.flatMap(week => week.contributionDays);
+
+      // Calculate streaks
+      let currentStreak = 0;
+      let longestStreak = 0;
+      let currentStreakStart = null;
+      let longestStreakStart = null;
+      let longestStreakEnd = null;
+
+      // Process days in reverse to get current streak
+      const reversedDays = [...contributionDays].reverse();
+      for (const day of reversedDays) {
+        if (day.contributionCount > 0) {
+          if (currentStreak === 0) {
+            currentStreakStart = day.date;
+          }
+          currentStreak++;
+        } else {
+          break;
+        }
+      }
+
+      // Process days normally to get longest streak
+      for (const day of contributionDays) {
+        if (day.contributionCount > 0) {
+          if (longestStreak === 0) {
+            longestStreakStart = day.date;
+          }
+          longestStreak = Math.max(longestStreak, currentStreak);
+          if (longestStreak === currentStreak) {
+            longestStreakEnd = day.date;
+          }
+          currentStreak++;
+        } else {
+          currentStreak = 0;
+        }
+      }
+
+      // Calculate daily and monthly patterns
+      const dailyCommits: Record<string, number> = {};
+      const monthlyCommits: Record<string, number> = {};
+
+      contributionDays.forEach(day => {
+        const date = new Date(day.date);
+        const dayName = date.toLocaleDateString('en-US', { weekday: 'long' });
+        const monthName = date.toLocaleDateString('en-US', { month: 'long' });
+        
+        dailyCommits[dayName] = (dailyCommits[dayName] || 0) + day.contributionCount;
+        monthlyCommits[monthName] = (monthlyCommits[monthName] || 0) + day.contributionCount;
+      });
+
+      // Find most active day and month
+      const mostActiveDay = Object.entries(dailyCommits)
+        .sort(([, a], [, b]) => b - a)[0];
+      const mostActiveMonth = Object.entries(monthlyCommits)
+        .sort(([, a], [, b]) => b - a)[0];
+
+      return new Response(
+        JSON.stringify({
+          calendarData: contributionDays,
+          stats: {
+            totalCommits: calendar.totalContributions,
+            currentStreak,
+            longestStreak,
+            streakInfo: {
+              currentStreakStart,
+              longestStreakStart,
+              longestStreakEnd,
+            },
+            mostActiveDay: {
+              name: mostActiveDay[0],
+              commits: Math.round(mostActiveDay[1] / (contributionDays.length / 7))
+            },
+            mostActiveMonth: {
+              name: mostActiveMonth[0],
+              commits: mostActiveMonth[1]
+            }
+          }
+        }),
+        {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
     // Network rankings load
     if (loadType === 'network') {
       // Fetch all followers and following
