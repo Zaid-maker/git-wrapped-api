@@ -135,6 +135,72 @@ export async function GET(request: Request) {
       auth: process.env.GITHUB_TOKEN,
     });
 
+    // Initial data load (basic user info and summary stats)
+    if (loadType === 'initial') {
+      const [user, repos] = await Promise.all([
+        octokit.rest.users.getByUsername({ username }),
+        octokit.rest.repos.listForUser({
+          username,
+          per_page: 100,
+          type: 'owner',
+        })
+      ]);
+
+      // Calculate total stars
+      const totalStars = repos.data.reduce((acc, repo) => acc + (repo.stargazers_count ?? 0), 0);
+
+      // Get contribution data
+      const contributionData = await octokit.graphql<ContributionData>(`
+        query($username: String!) {
+          user(login: $username) {
+            contributionsCollection {
+              contributionCalendar {
+                totalContributions
+                weeks {
+                  contributionDays {
+                    contributionCount
+                    date
+                  }
+                }
+              }
+            }
+          }
+        }
+      `, { username });
+
+      // Calculate streak
+      const days = contributionData.user.contributionsCollection.contributionCalendar.weeks
+        .flatMap(week => week.contributionDays);
+      
+      let currentStreak = 0;
+      let longestStreak = 0;
+      for (const day of days) {
+        if (day.contributionCount > 0) {
+          currentStreak++;
+          longestStreak = Math.max(longestStreak, currentStreak);
+        } else {
+          currentStreak = 0;
+        }
+      }
+
+      const stats = {
+        username: user.data.login,
+        avatarUrl: user.data.avatar_url,
+        name: user.data.name || user.data.login,
+        followers: user.data.followers,
+        following: user.data.following,
+        totalCommits: contributionData.user.contributionsCollection.contributionCalendar.totalContributions,
+        longestStreak,
+        starsEarned: totalStars,
+        commitRank: calculateCommitRank(contributionData.user.contributionsCollection.contributionCalendar.totalContributions),
+      };
+
+      return new Response(JSON.stringify(stats), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
     // Network rankings load
     if (loadType === 'network') {
       // Fetch all followers and following
