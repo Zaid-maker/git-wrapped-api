@@ -217,25 +217,87 @@ export async function GET(request: Request) {
 
       const networkUserLogins = Array.from(
         new Set([
+          username, // Include the current user
           ...followers.data.map(user => user.login),
           ...following.data.map(user => user.login)
         ])
       );
 
-      const networkStats = await Promise.all(
+      const networkUsersData = await Promise.all(
         networkUserLogins.slice(0, PER_PAGE).map(async (networkUsername) => {
-          const userData = await octokit.users.getByUsername({ username: networkUsername });
-          return {
-            username: userData.data.login,
-            avatarUrl: userData.data.avatar_url,
-            followers: userData.data.followers,
-            following: userData.data.following,
-          };
+          try {
+            const [userData, contributionsData] = await Promise.all([
+              octokit.users.getByUsername({ username: networkUsername }),
+              octokit.graphql<ContributionData>(`
+                query($username: String!) {
+                  user(login: $username) {
+                    contributionsCollection {
+                      contributionCalendar {
+                        totalContributions
+                        weeks {
+                          contributionDays {
+                            contributionCount
+                            date
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              `, { username: networkUsername })
+            ]);
+
+            // Calculate streak
+            const days = contributionsData.user.contributionsCollection.contributionCalendar.weeks
+              .flatMap(week => week.contributionDays);
+            
+            let currentStreak = 0;
+            let longestStreak = 0;
+            for (const day of days) {
+              if (day.contributionCount > 0) {
+                currentStreak++;
+                longestStreak = Math.max(longestStreak, currentStreak);
+              } else {
+                currentStreak = 0;
+              }
+            }
+
+            return {
+              username: userData.data.login,
+              avatarUrl: userData.data.avatar_url,
+              followers: userData.data.followers,
+              following: userData.data.following,
+              totalCommits: contributionsData.user.contributionsCollection.contributionCalendar.totalContributions,
+              longestStreak,
+              starsEarned: 0, // We'll update this in the next step
+              commitRank: 'Calculating...'
+            };
+          } catch (error) {
+            console.error(`Error fetching data for ${networkUsername}:`, error);
+            return null;
+          }
         })
       );
 
+      // Filter out failed requests and sort by total commits
+      const validNetworkUsers = networkUsersData
+        .filter((data): data is NonNullable<typeof data> => data !== null)
+        .sort((a, b) => b.totalCommits - a.totalCommits);
+
+      // Add rankings
+      const rankedUsers = validNetworkUsers.map((user, index) => ({
+        ...user,
+        rank: index + 1,
+        commitRank: index === 0 ? 'Top 1%' : 
+                    index < 3 ? 'Top 5%' : 
+                    index < 5 ? 'Top 10%' : 'Top 25%'
+      }));
+
+      // Find the current user's stats
+      const currentUserStats = rankedUsers.find(user => user.username === username) || rankedUsers[0];
+
       return NextResponse.json({
-        networkStats,
+        networkStats: currentUserStats,
         hasMore: networkUserLogins.length > PER_PAGE,
         nextPage: page + 1,
       });
