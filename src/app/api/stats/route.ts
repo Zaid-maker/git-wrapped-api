@@ -109,6 +109,14 @@ function calculateCommitRank(totalCommits: number): string {
   return 'Bronze';
 }
 
+// Helper function to calculate connection priority
+function calculateConnectionPriority(username: string, followers: string[], following: string[]): number {
+  if (followers.includes(username) && following.includes(username)) return 3; // Mutual connection
+  if (followers.includes(username)) return 2; // Follower
+  if (following.includes(username)) return 1; // Following
+  return 0; // No direct connection
+}
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -141,8 +149,11 @@ export async function GET(request: Request) {
         }),
       ]);
 
+      const followerLogins = followers.map(user => user.login);
+      const followingLogins = following.map(user => user.login);
+
       // Combine and deduplicate network users
-      const networkUsers = Array.from(new Set([...followers, ...following].map(user => user.login)));
+      const networkUsers = Array.from(new Set([username, ...followerLogins, ...followingLogins]));
       
       // Get current user's data
       const userData = await octokit.rest.users.getByUsername({ username });
@@ -160,10 +171,22 @@ export async function GET(request: Request) {
       const userStatsPromises = pageUsers.map(user => fetchUserStats(octokit, user));
       const userStats = await Promise.all(userStatsPromises);
 
-      // Sort users by total contributions
+      // Sort users by priority and total contributions
       const sortedUsers = userStats
         .filter((stats): stats is UserStats => stats !== null)
-        .sort((a, b) => (b.totalCommits || 0) - (a.totalCommits || 0));
+        .sort((a, b) => {
+          // Calculate connection priority
+          const priorityA = calculateConnectionPriority(a.username, followerLogins, followingLogins);
+          const priorityB = calculateConnectionPriority(b.username, followerLogins, followingLogins);
+
+          // If priorities are different, sort by priority
+          if (priorityB !== priorityA) {
+            return priorityB - priorityA;
+          }
+
+          // If priorities are the same, sort by total commits
+          return (b.totalCommits || 0) - (a.totalCommits || 0);
+        });
 
       // Calculate network statistics
       const totalCommits = sortedUsers.reduce((sum, user) => sum + (user.totalCommits || 0), 0);
@@ -182,6 +205,7 @@ export async function GET(request: Request) {
             followers: user.followers || 0,
             following: user.following || 0,
             commitRank: calculateCommitRank(user.totalCommits || 0),
+            connectionType: calculateConnectionPriority(user.username, followerLogins, followingLogins),
           })),
           networkStats: {
             username: currentUser.login,

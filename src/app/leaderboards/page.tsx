@@ -29,6 +29,7 @@ interface NetworkUser {
   followers: number;
   following: number;
   commitRank: string;
+  connectionType: number;
 }
 
 interface NetworkStats {
@@ -294,7 +295,8 @@ export default function LeaderboardsPage() {
                       username: user.username,
                       value: user.totalCommits,
                       rank: user.rank,
-                      avatarUrl: user.avatarUrl
+                      avatarUrl: user.avatarUrl,
+                      connectionType: user.connectionType
                     }))}
                     metric="commits"
                   />
@@ -304,7 +306,8 @@ export default function LeaderboardsPage() {
                       username: user.username,
                       value: user.longestStreak,
                       rank: user.rank,
-                      avatarUrl: user.avatarUrl
+                      avatarUrl: user.avatarUrl,
+                      connectionType: user.connectionType
                     }))}
                     metric="days"
                   />
@@ -314,7 +317,8 @@ export default function LeaderboardsPage() {
                       username: user.username,
                       value: user.starsEarned,
                       rank: user.rank,
-                      avatarUrl: user.avatarUrl
+                      avatarUrl: user.avatarUrl,
+                      connectionType: user.connectionType
                     }))}
                     metric="stars"
                   />
