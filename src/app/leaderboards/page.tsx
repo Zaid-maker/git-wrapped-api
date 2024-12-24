@@ -37,6 +37,7 @@ interface NetworkStats {
   averageStreak: number;
   averageStars: number;
   topLanguages: string[];
+  currentUser: NetworkUser;
 }
 
 export default function LeaderboardsPage() {
@@ -45,6 +46,9 @@ export default function LeaderboardsPage() {
   const [error, setError] = useState('');
   const [networkUsers, setNetworkUsers] = useState<NetworkUser[]>([]);
   const [networkStats, setNetworkStats] = useState<NetworkStats | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const USERS_PER_PAGE = 10;
 
   // Handle URL parameters
   useEffect(() => {
@@ -56,43 +60,37 @@ export default function LeaderboardsPage() {
     }
   }, []);
 
-  const handleSearch = async (searchUsername: string) => {
+  const loadNetworkUsers = async (searchUsername: string, page: number = 1) => {
     setLoading(true);
     setError('');
-    setNetworkUsers([]);
-    setNetworkStats(null);
 
     try {
-      const response = await fetch(`/api/stats?username=${searchUsername}&loadType=network`);
+      const response = await fetch(`/api/stats?username=${searchUsername}&loadType=network&page=${page}`);
       const data = await response.json();
 
       if (!response.ok) {
         throw new Error(data.error || 'Failed to fetch stats');
       }
 
-      // Transform network stats into leaderboard format
-      if (data.networkStats) {
-        const user: NetworkUser = {
-          username: data.networkStats.username,
-          avatarUrl: data.networkStats.avatarUrl,
-          totalCommits: data.networkStats.totalCommits || 0,
-          longestStreak: data.networkStats.longestStreak || 0,
-          starsEarned: data.networkStats.starsEarned || 0,
-          rank: data.networkStats.rank || 1,
-          followers: data.networkStats.followers || 0,
-          following: data.networkStats.following || 0,
-          commitRank: data.networkStats.commitRank || 'N/A'
-        };
-        setNetworkUsers([user]);
-
-        // Calculate network statistics
-        setNetworkStats({
-          totalUsers: data.totalUsers || 1,
-          averageCommits: data.averageCommits || user.totalCommits,
-          averageStreak: data.averageStreak || user.longestStreak,
-          averageStars: data.averageStars || user.starsEarned,
-          topLanguages: data.topLanguages || []
-        });
+      if (data.networkUsers && Array.isArray(data.networkUsers)) {
+        if (page === 1) {
+          setNetworkUsers(data.networkUsers);
+        } else {
+          setNetworkUsers(prev => [...prev, ...data.networkUsers]);
+        }
+        setHasMore(data.hasMore);
+        
+        // Set network stats on first load
+        if (page === 1 && data.networkStats) {
+          setNetworkStats({
+            totalUsers: data.totalUsers || data.networkUsers.length,
+            averageCommits: data.averageCommits || 0,
+            averageStreak: data.averageStreak || 0,
+            averageStars: data.averageStars || 0,
+            topLanguages: data.topLanguages || [],
+            currentUser: data.networkStats
+          });
+        }
       }
     } catch (err: any) {
       setError(err.message);
@@ -100,6 +98,42 @@ export default function LeaderboardsPage() {
       setLoading(false);
     }
   };
+
+  const handleSearch = async (searchUsername: string) => {
+    setCurrentPage(1);
+    setNetworkUsers([]);
+    setNetworkStats(null);
+    setHasMore(true);
+    await loadNetworkUsers(searchUsername, 1);
+  };
+
+  const loadMore = () => {
+    if (!loading && hasMore) {
+      loadNetworkUsers(username, currentPage + 1);
+      setCurrentPage(prev => prev + 1);
+    }
+  };
+
+  // Intersection Observer for infinite scrolling
+  useEffect(() => {
+    if (!networkUsers.length || !hasMore || loading) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !loading) {
+          loadMore();
+        }
+      },
+      { threshold: 0.5 }
+    );
+
+    const loadMoreTrigger = document.getElementById('load-more-trigger');
+    if (loadMoreTrigger) {
+      observer.observe(loadMoreTrigger);
+    }
+
+    return () => observer.disconnect();
+  }, [networkUsers, hasMore, loading]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -247,6 +281,11 @@ export default function LeaderboardsPage() {
                       Detailed Rankings
                     </h2>
                   </Tooltip>
+                  {networkStats && (
+                    <div className="text-sm text-gray-400">
+                      Showing {networkUsers.length} of {networkStats.totalUsers} users
+                    </div>
+                  )}
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <Leaderboard
@@ -280,6 +319,24 @@ export default function LeaderboardsPage() {
                     metric="stars"
                   />
                 </div>
+                {/* Load More Trigger */}
+                {hasMore && (
+                  <div
+                    id="load-more-trigger"
+                    className="h-10 flex items-center justify-center mt-6"
+                  >
+                    {loading ? (
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-purple-500" />
+                    ) : (
+                      <button
+                        onClick={loadMore}
+                        className="px-4 py-2 bg-gray-800/50 text-gray-300 rounded-lg hover:bg-gray-700/50 transition-colors"
+                      >
+                        Load More
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Network Averages */}
@@ -299,8 +356,8 @@ export default function LeaderboardsPage() {
                         {Math.round(networkStats.averageCommits)}
                       </div>
                       <div className="text-xs text-gray-500 mt-1">
-                        You: {networkUsers[0].totalCommits > networkStats.averageCommits ? '+' : ''}
-                        {Math.round(networkUsers[0].totalCommits - networkStats.averageCommits)}
+                        You: {networkStats.currentUser.totalCommits > networkStats.averageCommits ? '+' : ''}
+                        {Math.round(networkStats.currentUser.totalCommits - networkStats.averageCommits)}
                       </div>
                     </div>
                     <div className="bg-gray-800/50 rounded-lg p-4">
@@ -309,8 +366,8 @@ export default function LeaderboardsPage() {
                         {Math.round(networkStats.averageStreak)} days
                       </div>
                       <div className="text-xs text-gray-500 mt-1">
-                        You: {networkUsers[0].longestStreak > networkStats.averageStreak ? '+' : ''}
-                        {Math.round(networkUsers[0].longestStreak - networkStats.averageStreak)} days
+                        You: {networkStats.currentUser.longestStreak > networkStats.averageStreak ? '+' : ''}
+                        {Math.round(networkStats.currentUser.longestStreak - networkStats.averageStreak)} days
                       </div>
                     </div>
                     <div className="bg-gray-800/50 rounded-lg p-4">
@@ -319,8 +376,8 @@ export default function LeaderboardsPage() {
                         {Math.round(networkStats.averageStars)}
                       </div>
                       <div className="text-xs text-gray-500 mt-1">
-                        You: {networkUsers[0].starsEarned > networkStats.averageStars ? '+' : ''}
-                        {Math.round(networkUsers[0].starsEarned - networkStats.averageStars)}
+                        You: {networkStats.currentUser.starsEarned > networkStats.averageStars ? '+' : ''}
+                        {Math.round(networkStats.currentUser.starsEarned - networkStats.averageStars)}
                       </div>
                     </div>
                   </div>
