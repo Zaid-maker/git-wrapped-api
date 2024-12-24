@@ -10,7 +10,7 @@
 ## User Experience
 - [x] Add loading skeleton animations
 - [ ] Implement dark/light theme toggle
-- [ ] Add tooltips for stat explanations
+- [x] Add tooltips for stat explanations
 - [ ] Add mobile-optimized view
 - [ ] Implement progressive loading for large datasets
 

@@ -5,6 +5,7 @@ import { useState } from "react";
 import dynamic from "next/dynamic";
 import ContributionGraph from "./components/ContributionGraph";
 import LoadingSkeleton from "./components/LoadingSkeleton";
+import Tooltip from "./components/Tooltip";
 
 const ReactJson = dynamic(() => import("react-json-view"), { ssr: false });
 
@@ -229,55 +230,77 @@ export default function Home() {
                   <div className="p-4 space-y-8">
                     {/* Quick Stats */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      <div className="bg-gray-900/50 rounded-lg p-4 backdrop-blur-sm">
-                        <div className="text-sm text-gray-400">Total Commits</div>
-                        <div className="text-2xl font-bold text-white">{stats.totalCommits}</div>
-                      </div>
-                      <div className="bg-gray-900/50 rounded-lg p-4 backdrop-blur-sm">
-                        <div className="text-sm text-gray-400">Longest Streak</div>
-                        <div className="text-2xl font-bold text-white">{stats.longestStreak} days</div>
-                      </div>
-                      <div className="bg-gray-900/50 rounded-lg p-4 backdrop-blur-sm">
-                        <div className="text-sm text-gray-400">Stars Earned</div>
-                        <div className="text-2xl font-bold text-white">{stats.starsEarned}</div>
-                      </div>
-                      <div className="bg-gray-900/50 rounded-lg p-4 backdrop-blur-sm">
-                        <div className="text-sm text-gray-400">Commit Rank</div>
-                        <div className="text-2xl font-bold text-white">{stats.commitRank}</div>
-                      </div>
+                      <Tooltip content="Total number of commits made in the current year across all repositories" position="below" showArrow={false}>
+                        <div className="bg-gray-900/50 rounded-lg p-4 backdrop-blur-sm cursor-help">
+                          <div className="text-sm text-gray-400">Total Commits</div>
+                          <div className="text-2xl font-bold text-white">{stats.totalCommits}</div>
+                        </div>
+                      </Tooltip>
+
+                      <Tooltip content="Longest consecutive streak of days with at least one contribution" position="below" showArrow={false}>
+                        <div className="bg-gray-900/50 rounded-lg p-4 backdrop-blur-sm cursor-help">
+                          <div className="text-sm text-gray-400">Longest Streak</div>
+                          <div className="text-2xl font-bold text-white">{stats.longestStreak} days</div>
+                        </div>
+                      </Tooltip>
+
+                      <Tooltip content="Total number of stars received across all public repositories" position="below" showArrow={false}>
+                        <div className="bg-gray-900/50 rounded-lg p-4 backdrop-blur-sm cursor-help">
+                          <div className="text-sm text-gray-400">Stars Earned</div>
+                          <div className="text-2xl font-bold text-white">{stats.starsEarned}</div>
+                        </div>
+                      </Tooltip>
+
+                      <Tooltip content="Your contribution rank compared to all GitHub users based on total commits" position="below" showArrow={false}>
+                        <div className="bg-gray-900/50 rounded-lg p-4 backdrop-blur-sm cursor-help">
+                          <div className="text-sm text-gray-400">Commit Rank</div>
+                          <div className="text-2xl font-bold text-white">{stats.commitRank}</div>
+                        </div>
+                      </Tooltip>
                     </div>
 
                     {/* Contribution Graph */}
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
-                        <h3 className="text-sm font-medium text-gray-300">Contribution Activity</h3>
-                        <div className="text-xs text-gray-400">
-                          Most active: {stats.mostActiveDay.name} ({stats.mostActiveDay.commits} commits/day)
-                        </div>
+                        <Tooltip content="Your daily contribution activity over time, including commits, pull requests, and issues" position="below" showArrow={false}>
+                          <h3 className="text-sm font-medium text-gray-300 cursor-help">
+                            Contribution Activity
+                          </h3>
+                        </Tooltip>
+                        <Tooltip content="The day of the week when you're most productive, based on average contributions" position="below" showArrow={false}>
+                          <div className="text-xs text-gray-400 cursor-help">
+                            Most active: {stats.mostActiveDay.name} ({stats.mostActiveDay.commits} commits/day)
+                          </div>
+                        </Tooltip>
                       </div>
                       <ContributionGraph data={stats.calendarData} />
                     </div>
 
                     {/* Top Languages */}
                     <div className="bg-gray-900/50 rounded-lg p-4 backdrop-blur-sm">
-                      <h3 className="text-sm font-medium text-gray-300 mb-3">Top Languages</h3>
+                      <Tooltip content="Most frequently used programming languages in your repositories" position="below" showArrow={false}>
+                        <h3 className="text-sm font-medium text-gray-300 mb-3 cursor-help">
+                          Top Languages
+                        </h3>
+                      </Tooltip>
                       <div className="flex flex-wrap gap-2">
                         {stats.topLanguages.map((lang) => (
-                          <span
-                            key={lang}
-                            className="px-3 py-1 rounded-full text-xs font-medium bg-purple-500/10 text-purple-200 border border-purple-500/20"
-                          >
-                            {lang}
-                          </span>
+                          <Tooltip key={lang} content={`One of your most used programming languages`} position="below" showArrow={false}>
+                            <span className="px-3 py-1 rounded-full text-xs font-medium bg-purple-500/10 text-purple-200 border border-purple-500/20 cursor-help">
+                              {lang}
+                            </span>
+                          </Tooltip>
                         ))}
                       </div>
                     </div>
 
                     {/* Stats JSON View */}
-                    <div className="overflow-auto max-h-[400px] rounded-lg bg-gray-900/50 backdrop-blur-sm">
-                      <div className="p-4 border-b border-gray-700/50">
-                        <h3 className="text-sm font-medium text-gray-300">Raw Data</h3>
-                      </div>
+                    <div className="overflow-hidden rounded-lg bg-gray-900/50 backdrop-blur-sm">
+                      <Tooltip content="Complete data response from the API in JSON format" position="below" showArrow={false}>
+                        <div className="p-4 border-b border-gray-700/50 cursor-help">
+                          <h3 className="text-sm font-medium text-gray-300">Raw Data</h3>
+                        </div>
+                      </Tooltip>
                       <div className="p-4">
                         <ReactJson
                           src={stats}
