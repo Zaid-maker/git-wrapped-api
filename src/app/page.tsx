@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 import ContributionGraph from "./components/ContributionGraph";
 import LoadingSkeleton from "./components/LoadingSkeleton";
 import Tooltip from "./components/Tooltip";
+import StatBadge from "./components/StatBadge";
 
 const ReactJson = dynamic(() => import("react-json-view"), { ssr: false });
 
@@ -291,6 +292,47 @@ export default function Home() {
                             </span>
                           </Tooltip>
                         ))}
+                      </div>
+                    </div>
+
+                    {/* Shareable Badges */}
+                    <div className="bg-gray-900/50 rounded-lg p-4 backdrop-blur-sm">
+                      <div className="flex items-center justify-between mb-3">
+                        <Tooltip content="Share your GitHub stats with these badges" position="below" showArrow={false}>
+                          <h3 className="text-sm font-medium text-gray-300 cursor-help">
+                            Shareable Badges
+                          </h3>
+                        </Tooltip>
+                        <Tooltip content="Click the copy button to get the markdown code" position="below" showArrow={false}>
+                          <div className="text-xs text-gray-400 cursor-help flex items-center gap-1">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                            </svg>
+                            Copy to add to your README
+                          </div>
+                        </Tooltip>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <StatBadge
+                          label="Total Commits"
+                          value={stats.totalCommits}
+                          color="purple"
+                        />
+                        <StatBadge
+                          label="Commit Streak"
+                          value={`${stats.longestStreak} days`}
+                          color="green"
+                        />
+                        <StatBadge
+                          label="GitHub Stars"
+                          value={stats.starsEarned}
+                          color="orange"
+                        />
+                        <StatBadge
+                          label="Commit Rank"
+                          value={stats.commitRank}
+                          color="blue"
+                        />
                       </div>
                     </div>
 

@@ -30,7 +30,7 @@
 
 ## Social Features
 - [ ] Add comparison with other users
-- [ ] Implement shareable badges
+- [x] Implement shareable badges
 - [ ] Add team/organization statistics
 - [ ] Create leaderboards
 - [ ] Add collaboration network visualization
