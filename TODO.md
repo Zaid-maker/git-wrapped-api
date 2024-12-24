@@ -11,7 +11,7 @@
 - [x] Add loading skeleton animations
 - [ ] Implement dark/light theme toggle
 - [x] Add tooltips for stat explanations
-- [ ] Add mobile-optimized view
+- [x] Add mobile-optimized view
 - [ ] Implement progressive loading for large datasets
 
 ## Analytics & Insights
@@ -33,6 +33,7 @@
 - [x] Implement shareable badges
 - [ ] Add team/organization statistics
 - [x] Create leaderboards
+- [x] Add dedicated leaderboards page
 - [ ] Add collaboration network visualization
 
 ## Technical Improvements

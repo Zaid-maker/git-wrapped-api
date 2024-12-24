@@ -8,6 +8,7 @@ import LoadingSkeleton from "./components/LoadingSkeleton";
 import Tooltip from "./components/Tooltip";
 import StatBadge from "./components/StatBadge";
 import Leaderboard from "./components/Leaderboard";
+import Link from 'next/link';
 
 const ReactJson = dynamic(() => import("react-json-view"), { ssr: false });
 
@@ -349,41 +350,28 @@ export default function Home() {
                       </div>
                     </div>
 
-                    {/* Leaderboards */}
-                    <div className="bg-gray-900/50 rounded-lg p-4 backdrop-blur-sm">
-                      <div className="flex items-center justify-between mb-4">
-                        <Tooltip content="Compare stats with your followers and following" position="below" showArrow={false}>
-                          <h3 className="text-sm font-medium text-gray-300 cursor-help">
-                            Network Rankings
-                          </h3>
-                        </Tooltip>
-                        <Tooltip content="Rankings based on your network (you, followers, following)" position="below" showArrow={false}>
-                          <div className="text-xs text-gray-400 cursor-help flex items-center gap-1">
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    {/* Leaderboards Link */}
+                    <Link
+                      href={`/leaderboards?username=${username}`}
+                      className="block bg-gray-900/50 rounded-lg p-4 backdrop-blur-sm border border-gray-700/50 hover:border-purple-500/20 transition-colors group"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-lg bg-gradient-to-r from-purple-500/10 to-pink-500/10 flex items-center justify-center">
+                            <svg className="w-5 h-5 text-gray-400 group-hover:text-purple-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                             </svg>
-                            Network Rankings
                           </div>
-                        </Tooltip>
+                          <div>
+                            <h3 className="text-sm font-medium text-gray-300 group-hover:text-white">View Network Rankings</h3>
+                            <p className="text-xs text-gray-400">Compare your stats with followers and following</p>
+                          </div>
+                        </div>
+                        <svg className="w-5 h-5 text-gray-400 group-hover:text-purple-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
                       </div>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <Leaderboard
-                          title="Total Commits"
-                          entries={stats.leaderboards.commits}
-                          metric="commits"
-                        />
-                        <Leaderboard
-                          title="Longest Streak"
-                          entries={stats.leaderboards.streak}
-                          metric="days"
-                        />
-                        <Leaderboard
-                          title="GitHub Stars"
-                          entries={stats.leaderboards.stars}
-                          metric="stars"
-                        />
-                      </div>
-                    </div>
+                    </Link>
 
                     {/* Stats JSON View */}
                     <div className="overflow-hidden rounded-lg bg-gray-900/50 backdrop-blur-sm">
