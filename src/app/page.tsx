@@ -25,11 +25,34 @@ interface LeaderboardEntry {
   avatarUrl: string;
 }
 
-interface GitHubStats {
-  longestStreak: number;
+interface Repository {
+  name: string;
+  stars: number;
+  languages: string[];
+}
+
+interface NetworkStats {
+  username: string;
+  avatarUrl: string;
+  followers: number;
+  following: number;
+  rank?: number;
+  totalCommits?: number;
+  longestStreak?: number;
+  starsEarned?: number;
+  commitRank?: string;
+}
+
+interface Stats {
+  username: string;
+  avatarUrl: string;
+  name: string;
+  followers: number;
+  following: number;
   totalCommits: number;
+  longestStreak: number;
+  starsEarned: number;
   commitRank: string;
-  calendarData: ContributionDay[];
   mostActiveDay: {
     name: string;
     commits: number;
@@ -38,21 +61,24 @@ interface GitHubStats {
     name: string;
     commits: number;
   };
-  starsEarned: number;
-  topLanguages: string[];
-  leaderboards: {
-    commits: LeaderboardEntry[];
-    streak: LeaderboardEntry[];
-    stars: LeaderboardEntry[];
-  };
+  calendarData?: ContributionDay[];
+  repositories?: Repository[];
+  networkStats?: NetworkStats;
+}
+
+interface ApiResponse {
+  stats?: Partial<Stats>;
+  calendarData?: ContributionDay[];
+  repositories?: Repository[];
+  networkStats?: NetworkStats;
+  hasMore?: boolean;
+  nextPage?: number;
+  error?: string;
 }
 
 export default function Home() {
   const [username, setUsername] = useState("");
-  const [basicStats, setBasicStats] = useState<any>(null);
-  const [contributions, setContributions] = useState<any>(null);
-  const [repositories, setRepositories] = useState<any[]>([]);
-  const [networkStats, setNetworkStats] = useState<any>(null);
+  const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState<Record<string, boolean>>({
     initial: false,
     contributions: false,
@@ -69,7 +95,7 @@ export default function Home() {
 
     try {
       const response = await fetch(`/api/stats?username=${username}&loadType=${type}&page=${page}`);
-      const data = await response.json();
+      const data: ApiResponse = await response.json();
 
       if (!response.ok) {
         throw new Error(data.error || "Failed to fetch stats");
@@ -77,26 +103,43 @@ export default function Home() {
 
       switch (type) {
         case 'initial':
-          setBasicStats(data);
-          // After loading basic stats, load other data types
-          loadData('contributions');
-          loadData('repositories');
-          loadData('network');
+          if ('username' in data) {
+            setStats(data as Stats);
+            // After loading basic stats, load other data types
+            loadData('contributions');
+            loadData('repositories');
+            loadData('network');
+          }
           break;
         case 'contributions':
-          setContributions(data.calendarData);
+          setStats((prev: Stats | null) => prev && ({
+            ...prev,
+            ...data.stats,
+            calendarData: data.calendarData,
+          }));
           break;
         case 'repositories':
           if (page === 1) {
-            setRepositories(data.repositories);
+            setStats((prev: Stats | null) => prev && ({
+              ...prev,
+              repositories: data.repositories || [],
+            }));
           } else {
-            setRepositories(prev => [...prev, ...data.repositories]);
+            setStats((prev: Stats | null) => prev && ({
+              ...prev,
+              repositories: [...(prev.repositories || []), ...(data.repositories || [])],
+            }));
           }
-          setHasMore(data.hasMore);
-          setCurrentPage(data.nextPage);
+          setHasMore(!!data.hasMore);
+          setCurrentPage(data.nextPage || page + 1);
           break;
         case 'network':
-          setNetworkStats(data.networkStats);
+          if (data.networkStats) {
+            setStats((prev: Stats | null) => prev && ({
+              ...prev,
+              networkStats: data.networkStats,
+            }));
+          }
           break;
       }
     } catch (err: any) {
@@ -108,10 +151,7 @@ export default function Home() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setBasicStats(null);
-    setContributions(null);
-    setRepositories([]);
-    setNetworkStats(null);
+    setStats(null);
     setCurrentPage(1);
     setHasMore(true);
     await loadData('initial');
@@ -125,7 +165,7 @@ export default function Home() {
 
   // Intersection Observer for infinite scrolling
   useEffect(() => {
-    if (!repositories.length) return;
+    if (!stats?.repositories?.length) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -142,7 +182,7 @@ export default function Home() {
     }
 
     return () => observer.disconnect();
-  }, [repositories, hasMore, loading.repositories]);
+  }, [stats?.repositories, hasMore, loading.repositories]);
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-800 text-gray-100">
@@ -275,41 +315,41 @@ export default function Home() {
             <div className="md:col-span-3 relative min-h-[400px]">
               {Object.values(loading).some(Boolean) && <LoadingSkeleton />}
               
-              {basicStats && (
+              {stats && (
                 <div className="space-y-6">
                   {/* Basic Stats */}
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <Tooltip content="Total number of commits made in the current year across all repositories" position="below" showArrow={false}>
                       <div className="bg-gray-900/50 rounded-lg p-4 backdrop-blur-sm cursor-help">
                         <div className="text-sm text-gray-400">Total Commits</div>
-                        <div className="text-2xl font-bold text-white">{basicStats.totalCommits}</div>
+                        <div className="text-2xl font-bold text-white">{stats.totalCommits}</div>
                       </div>
                     </Tooltip>
 
                     <Tooltip content="Longest consecutive streak of days with at least one contribution" position="below" showArrow={false}>
                       <div className="bg-gray-900/50 rounded-lg p-4 backdrop-blur-sm cursor-help">
                         <div className="text-sm text-gray-400">Longest Streak</div>
-                        <div className="text-2xl font-bold text-white">{basicStats.longestStreak} days</div>
+                        <div className="text-2xl font-bold text-white">{stats.longestStreak} days</div>
                       </div>
                     </Tooltip>
 
                     <Tooltip content="Total number of stars received across all public repositories" position="below" showArrow={false}>
                       <div className="bg-gray-900/50 rounded-lg p-4 backdrop-blur-sm cursor-help">
                         <div className="text-sm text-gray-400">Stars Earned</div>
-                        <div className="text-2xl font-bold text-white">{basicStats.starsEarned}</div>
+                        <div className="text-2xl font-bold text-white">{stats.starsEarned}</div>
                       </div>
                     </Tooltip>
 
                     <Tooltip content="Your contribution rank compared to all GitHub users based on total commits" position="below" showArrow={false}>
                       <div className="bg-gray-900/50 rounded-lg p-4 backdrop-blur-sm cursor-help">
                         <div className="text-sm text-gray-400">Commit Rank</div>
-                        <div className="text-2xl font-bold text-white">{basicStats.commitRank}</div>
+                        <div className="text-2xl font-bold text-white">{stats.commitRank}</div>
                       </div>
                     </Tooltip>
                   </div>
 
                   {/* Contribution Graph */}
-                  {contributions && (
+                  {stats.calendarData && (
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
                         <Tooltip content="Your daily contribution activity over time, including commits, pull requests, and issues" position="below" showArrow={false}>
@@ -319,30 +359,30 @@ export default function Home() {
                         </Tooltip>
                         <Tooltip content="The day of the week when you're most productive, based on average contributions" position="below" showArrow={false}>
                           <div className="text-xs text-gray-400 cursor-help">
-                            Most active: {basicStats.mostActiveDay.name} ({basicStats.mostActiveDay.commits} commits/day)
+                            Most active: {stats.mostActiveDay.name} ({stats.mostActiveDay.commits} commits/day)
                           </div>
                         </Tooltip>
                       </div>
-                      <ContributionGraph data={contributions} />
+                      <ContributionGraph data={stats.calendarData} />
                     </div>
                   )}
 
                   {/* Repository List */}
-                  {repositories.length > 0 && (
+                  {stats?.repositories && stats.repositories.length > 0 && (
                     <div className="space-y-4">
                       <h3 className="text-lg font-medium">Repositories</h3>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {repositories.map((repo, index) => (
+                        {stats.repositories.map((repo, index) => (
                           <div
                             key={repo.name + index}
                             className="bg-gray-800/50 rounded-lg p-4"
                           >
                             <h4 className="font-medium">{repo.name}</h4>
                             <div className="text-sm text-gray-400">
-                              ⭐ {repo.stars} stars
+                              ⭐ {repo.stars || 0} stars
                             </div>
                             <div className="mt-2 flex flex-wrap gap-2">
-                              {repo.languages.map((lang: string) => (
+                              {repo.languages.map((lang) => (
                                 <span
                                   key={lang}
                                   className="px-2 py-1 text-xs rounded-full bg-purple-500/10 text-purple-200"
@@ -367,7 +407,7 @@ export default function Home() {
                   )}
 
                   {/* Network Stats */}
-                  {networkStats && (
+                  {stats?.networkStats && (
                     <div className="space-y-4">
                       <div className="flex items-center justify-between">
                         <Tooltip content="Your network stats" position="below" showArrow={false}>
@@ -377,29 +417,29 @@ export default function Home() {
                         </Tooltip>
                         <Tooltip content="Your network rank compared to all GitHub users based on total commits" position="below" showArrow={false}>
                           <div className="text-xs text-gray-400 cursor-help">
-                            Network Rank: {networkStats.rank}
+                            Network Rank: {stats.networkStats.rank || 'N/A'}
                           </div>
                         </Tooltip>
                       </div>
                       <div className="flex flex-wrap gap-2">
                         <StatBadge
                           label="Total Commits"
-                          value={networkStats.totalCommits}
+                          value={stats.networkStats.totalCommits || 0}
                           color="purple"
                         />
                         <StatBadge
                           label="Commit Streak"
-                          value={`${networkStats.longestStreak} days`}
+                          value={`${stats.networkStats.longestStreak || 0} days`}
                           color="green"
                         />
                         <StatBadge
                           label="GitHub Stars"
-                          value={networkStats.starsEarned}
+                          value={stats.networkStats.starsEarned || 0}
                           color="orange"
                         />
                         <StatBadge
                           label="Commit Rank"
-                          value={networkStats.commitRank}
+                          value={stats.networkStats.commitRank || 'N/A'}
                           color="blue"
                         />
                       </div>
