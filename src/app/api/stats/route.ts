@@ -1,356 +1,157 @@
 import { NextResponse } from "next/server";
 import { Octokit } from "@octokit/rest";
 
-export const runtime = "edge";
+interface ContributionData {
+  user: {
+    contributionsCollection: {
+      contributionCalendar: {
+        totalContributions: number;
+        weeks: {
+          contributionDays: {
+            contributionCount: number;
+            date: string;
+            weekday: number;
+          }[];
+        }[];
+      };
+    };
+  };
+}
 
-const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
-if (!GITHUB_TOKEN) {
-  throw new Error("Missing GITHUB_TOKEN environment variable");
+interface NetworkUser {
+  login: string;
+  avatar_url: string;
+  followers: number;
+  following: number;
 }
 
 const octokit = new Octokit({
-  auth: GITHUB_TOKEN,
+  auth: process.env.GITHUB_TOKEN,
 });
 
-interface ContributionDay {
-  contributionCount: number;
-  date: string;
-  weekday: number;
-}
+const PER_PAGE = 30; // Number of items per page
 
-interface LeaderboardEntry {
-  username: string;
-  value: number;
-  rank: number;
-  avatarUrl: string;
-}
-
-interface GitHubStats {
-  longestStreak: number;
-  totalCommits: number;
-  commitRank: string;
-  calendarData: ContributionDay[];
-  mostActiveDay: {
-    name: string;
-    commits: number;
-  };
-  mostActiveMonth: {
-    name: string;
-    commits: number;
-  };
-  starsEarned: number;
-  topLanguages: string[];
-  leaderboards: {
-    commits: LeaderboardEntry[];
-    streak: LeaderboardEntry[];
-    stars: LeaderboardEntry[];
-  };
-}
-
-/**
- * Determines the user's commit rank based on their total number of contributions
- * These thresholds are approximations based on general GitHub activity patterns
- */
-function getCommitRank(totalCommits: number): string {
-  if (totalCommits >= 5000) return "Top 0.5%-1%";
-  if (totalCommits >= 2000) return "Top 1%-3%";
-  if (totalCommits >= 1000) return "Top 5%-10%";
-  if (totalCommits >= 500) return "Top 10%-15%";
-  if (totalCommits >= 200) return "Top 25%-30%";
-  if (totalCommits >= 50) return "Median 50%";
-  return "Bottom 30%";
-}
-
-// Constants for date formatting
-const WEEKDAY_NAMES = [
-  "Sunday",
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-] as const;
-
-const MONTH_NAMES = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-] as const;
-
-/**
- * GitHub Stats API endpoint
- * Fetches and processes a user's GitHub statistics including:
- * - Contribution data
- * - Commit patterns
- * - Repository stars
- * - Programming languages
- *
- * @param request - Incoming HTTP request with 'username' query parameter
- * @returns JSON response with processed GitHub statistics
- */
-export async function GET(request: Request): Promise<NextResponse> {
+export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const username = searchParams.get("username");
+    const username = searchParams.get('username');
+    const page = parseInt(searchParams.get('page') || '1');
+    const loadType = searchParams.get('loadType') || 'initial';
 
     if (!username) {
-      return NextResponse.json(
-        { error: "Username parameter is required" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Username is required' }, { status: 400 });
     }
 
-    // GraphQL query for main user data
-    const query = `
-      query($username: String!) {
-        user(login: $username) {
-          avatarUrl
-          contributionsCollection {
-            contributionCalendar {
-              totalContributions
-              weeks {
-                contributionDays {
-                  contributionCount
-                  date
-                  weekday
-                }
-              }
-            }
-          }
-          repositories(first: 100, orderBy: {field: STARGAZERS, direction: DESC}) {
-            nodes {
-              stargazerCount
-              primaryLanguage {
-                name
-              }
-            }
-          }
-        }
-      }
-    `;
+    // Initial data load (basic user info and summary stats)
+    if (loadType === 'initial') {
+      const user = await octokit.users.getByUsername({ username });
+      const stats = {
+        username: user.data.login,
+        avatarUrl: user.data.avatar_url,
+        name: user.data.name,
+        followers: user.data.followers,
+        following: user.data.following,
+      };
+      return NextResponse.json(stats);
+    }
 
-    // Fetch main user data using GraphQL
-    const graphqlResponse = (await octokit.graphql(query, { username })) as any;
-    const userData = graphqlResponse.user;
-
-    // Fetch followers and following using REST API
-    const [followersResponse, followingResponse] = await Promise.all([
-      octokit.rest.users.listFollowersForUser({ username, per_page: 3 }),
-      octokit.rest.users.listFollowingForUser({ username, per_page: 3 })
-    ]);
-
-    // Fetch additional data for network users
-    const networkUsers = [
-      {
-        login: username,
-        avatarUrl: userData.avatarUrl,
-        contributionsCollection: userData.contributionsCollection,
-        repositories: userData.repositories,
-      }
-    ];
-
-    // Process followers and following data
-    const networkLogins = [...followersResponse.data, ...followingResponse.data]
-      .map(user => user.login)
-      .filter((login, index, self) => self.indexOf(login) === index); // Remove duplicates
-
-    // Fetch data for each network user
-    const networkUsersData = (await Promise.all(
-      networkLogins.map(async (login) => {
-        try {
-          const userQuery = `
-            query($login: String!) {
-              user(login: $login) {
-                avatarUrl
-                contributionsCollection {
-                  contributionCalendar {
-                    totalContributions
-                    weeks {
-                      contributionDays {
-                        contributionCount
-                        date
-                        weekday
-                      }
-                    }
-                  }
-                }
-                repositories(first: 100, orderBy: {field: STARGAZERS, direction: DESC}) {
-                  nodes {
-                    stargazerCount
+    // Contribution data load
+    if (loadType === 'contributions') {
+      const query = `
+        query($username: String!) {
+          user(login: $username) {
+            contributionsCollection {
+              contributionCalendar {
+                totalContributions
+                weeks {
+                  contributionDays {
+                    contributionCount
+                    date
+                    weekday
                   }
                 }
               }
             }
-          `;
-          const response = (await octokit.graphql(userQuery, { login })) as any;
-          return {
-            login,
-            avatarUrl: response.user.avatarUrl,
-            contributionsCollection: response.user.contributionsCollection,
-            repositories: response.user.repositories,
-          };
-        } catch (error) {
-          console.error(`Error fetching data for user ${login}:`, error);
-          return null;
+          }
         }
-      })
-    )).filter((data): data is NonNullable<typeof data> => data !== null);
+      `;
 
-    // Add valid network users data
-    networkUsers.push(...networkUsersData);
-
-    // Process contribution data and other stats as before
-    const contributionDays =
-      userData.contributionsCollection.contributionCalendar.weeks
-        .flatMap((week: any) => week.contributionDays)
-        .filter((day: any) => new Date(day.date) >= new Date("2024-01-01"));
-
-    // Calculate monthly contribution statistics
-    const monthlyCommits: Record<string, number> = {};
-    contributionDays.forEach((day: ContributionDay) => {
-      const month = new Date(day.date).getMonth() + 1;
-      const monthKey = month.toString().padStart(2, "0");
-      monthlyCommits[monthKey] =
-        (monthlyCommits[monthKey] || 0) + day.contributionCount;
-    });
-
-    // Calculate daily contribution patterns
-    const dailyCommits: Record<string, number> = {};
-    contributionDays.forEach((day: ContributionDay) => {
-      dailyCommits[day.weekday] =
-        (dailyCommits[day.weekday] || 0) + day.contributionCount;
-    });
-
-    // Find peak activity periods
-    const [mostActiveMonth] = Object.entries(monthlyCommits).sort(
-      ([, a], [, b]) => b - a
-    );
-
-    const [mostActiveDay] = Object.entries(dailyCommits).sort(
-      ([, a], [, b]) => b - a
-    );
-
-    // Calculate repository statistics
-    const totalStars = userData.repositories.nodes.reduce(
-      (acc: number, repo: any) => acc + repo.stargazerCount,
-      0
-    );
-
-    // Process programming language statistics
-    const languages = userData.repositories.nodes.reduce(
-      (acc: Record<string, number>, repo: any) => {
-        if (repo.primaryLanguage?.name) {
-          acc[repo.primaryLanguage.name] =
-            (acc[repo.primaryLanguage.name] || 0) + 1;
-        }
-        return acc;
-      },
-      {}
-    );
-
-    const topLanguages = Object.entries(languages)
-      .sort(([, a], [, b]): number => (b as number) - (a as number))
-      .slice(0, 3)
-      .map(([lang]) => lang);
-
-    // Calculate contribution streaks
-    let currentStreak = 0;
-    let maxStreak = 0;
-    for (const day of contributionDays) {
-      if (day.contributionCount > 0) {
-        currentStreak++;
-        maxStreak = Math.max(maxStreak, currentStreak);
-      } else {
-        currentStreak = 0;
-      }
+      const contributionData = await octokit.graphql<ContributionData>(query, { username });
+      return NextResponse.json({
+        calendarData: contributionData.user.contributionsCollection.contributionCalendar,
+      });
     }
 
-    const leaderboards = {
-      commits: networkUsers
-        .map((user) => ({
-          username: user.login,
-          value: user.contributionsCollection.contributionCalendar.totalContributions,
-          avatarUrl: user.avatarUrl,
-          rank: 0,
-        }))
-        .sort((a, b) => b.value - a.value)
-        .map((entry, index) => ({ ...entry, rank: index + 1 })),
+    // Repository data load (paginated)
+    if (loadType === 'repositories') {
+      const repos = await octokit.repos.listForUser({
+        username,
+        per_page: PER_PAGE,
+        page,
+        sort: 'updated',
+      });
 
-      streak: networkUsers
-        .map((user) => {
-          let maxStreak = 0;
-          let currentStreak = 0;
-          const days = user.contributionsCollection?.contributionCalendar?.weeks
-            ?.flatMap((week: any) => week.contributionDays)
-            ?.filter((day: any) => new Date(day.date) >= new Date("2024-01-01")) || [];
-
-          days.forEach((day: any) => {
-            if (day.contributionCount > 0) {
-              currentStreak++;
-              maxStreak = Math.max(maxStreak, currentStreak);
-            } else {
-              currentStreak = 0;
-            }
+      const repoStats = await Promise.all(
+        repos.data.map(async (repo) => {
+          const languages = await octokit.repos.listLanguages({
+            owner: repo.owner.login,
+            repo: repo.name,
           });
 
           return {
-            username: user.login,
-            value: maxStreak,
-            avatarUrl: user.avatarUrl,
-            rank: 0,
+            name: repo.name,
+            stars: repo.stargazers_count,
+            languages: Object.keys(languages.data),
           };
         })
-        .sort((a, b) => b.value - a.value)
-        .map((entry, index) => ({ ...entry, rank: index + 1 })),
+      );
 
-      stars: networkUsers
-        .map((user) => ({
-          username: user.login,
-          value: user.repositories.nodes.reduce(
-            (acc: number, repo: any) => acc + (repo.stargazerCount || 0),
-            0
-          ),
-          avatarUrl: user.avatarUrl,
-          rank: 0,
-        }))
-        .sort((a, b) => b.value - a.value)
-        .map((entry, index) => ({ ...entry, rank: index + 1 })),
-    };
+      return NextResponse.json({
+        repositories: repoStats,
+        hasMore: repos.data.length === PER_PAGE,
+        nextPage: page + 1,
+      });
+    }
 
-    // Prepare and return the final statistics
-    const stats: GitHubStats = {
-      longestStreak: maxStreak,
-      totalCommits: userData.contributionsCollection.contributionCalendar.totalContributions,
-      commitRank: getCommitRank(userData.contributionsCollection.contributionCalendar.totalContributions),
-      calendarData: contributionDays,
-      mostActiveDay: {
-        name: WEEKDAY_NAMES[parseInt(mostActiveDay[0])],
-        commits: Math.round(mostActiveDay[1] / (contributionDays.length / 7)),
-      },
-      mostActiveMonth: {
-        name: MONTH_NAMES[parseInt(mostActiveMonth[0]) - 1],
-        commits: mostActiveMonth[1],
-      },
-      starsEarned: totalStars,
-      topLanguages,
-      leaderboards,
-    };
+    // Network rankings load
+    if (loadType === 'network') {
+      const [followers, following] = await Promise.all([
+        octokit.users.listFollowersForUser({ username, per_page: PER_PAGE, page }),
+        octokit.users.listFollowingForUser({ username, per_page: PER_PAGE, page }),
+      ]);
 
-    return NextResponse.json(stats);
+      const networkUserLogins = Array.from(
+        new Set([
+          ...followers.data.map(user => user.login),
+          ...following.data.map(user => user.login)
+        ])
+      );
+
+      const networkStats = await Promise.all(
+        networkUserLogins.slice(0, PER_PAGE).map(async (networkUsername) => {
+          const userData = await octokit.users.getByUsername({ username: networkUsername });
+          return {
+            username: userData.data.login,
+            avatarUrl: userData.data.avatar_url,
+            followers: userData.data.followers,
+            following: userData.data.following,
+          };
+        })
+      );
+
+      return NextResponse.json({
+        networkStats,
+        hasMore: networkUserLogins.length > PER_PAGE,
+        nextPage: page + 1,
+      });
+    }
+
+    return NextResponse.json({ error: 'Invalid load type' }, { status: 400 });
+
   } catch (error: any) {
-    console.error("Error fetching GitHub stats:", error);
+    console.error('Error fetching GitHub stats:', error);
     return NextResponse.json(
-      { error: error.message || "Failed to fetch GitHub statistics" },
+      { error: error.message || 'Failed to fetch GitHub stats' },
       { status: 500 }
     );
   }

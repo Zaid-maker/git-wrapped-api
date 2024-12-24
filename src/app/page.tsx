@@ -1,7 +1,7 @@
 'use client'
 
 import Image from "next/image";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import ContributionGraph from "./components/ContributionGraph";
 import LoadingSkeleton from "./components/LoadingSkeleton";
@@ -49,31 +49,100 @@ interface GitHubStats {
 
 export default function Home() {
   const [username, setUsername] = useState("");
-  const [stats, setStats] = useState<GitHubStats | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [basicStats, setBasicStats] = useState<any>(null);
+  const [contributions, setContributions] = useState<any>(null);
+  const [repositories, setRepositories] = useState<any[]>([]);
+  const [networkStats, setNetworkStats] = useState<any>(null);
+  const [loading, setLoading] = useState<Record<string, boolean>>({
+    initial: false,
+    contributions: false,
+    repositories: false,
+    network: false,
+  });
   const [error, setError] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
+  const loadData = async (type: string, page: number = 1) => {
+    setLoading(prev => ({ ...prev, [type]: true }));
     setError("");
-    setStats(null);
 
     try {
-      const response = await fetch(`/api/stats?username=${username}`);
+      const response = await fetch(`/api/stats?username=${username}&loadType=${type}&page=${page}`);
       const data = await response.json();
 
       if (!response.ok) {
         throw new Error(data.error || "Failed to fetch stats");
       }
 
-      setStats(data);
+      switch (type) {
+        case 'initial':
+          setBasicStats(data);
+          // After loading basic stats, load other data types
+          loadData('contributions');
+          loadData('repositories');
+          loadData('network');
+          break;
+        case 'contributions':
+          setContributions(data.calendarData);
+          break;
+        case 'repositories':
+          if (page === 1) {
+            setRepositories(data.repositories);
+          } else {
+            setRepositories(prev => [...prev, ...data.repositories]);
+          }
+          setHasMore(data.hasMore);
+          setCurrentPage(data.nextPage);
+          break;
+        case 'network':
+          setNetworkStats(data.networkStats);
+          break;
+      }
     } catch (err: any) {
       setError(err.message);
     } finally {
-      setLoading(false);
+      setLoading(prev => ({ ...prev, [type]: false }));
     }
   };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBasicStats(null);
+    setContributions(null);
+    setRepositories([]);
+    setNetworkStats(null);
+    setCurrentPage(1);
+    setHasMore(true);
+    await loadData('initial');
+  };
+
+  const loadMoreRepositories = () => {
+    if (!loading.repositories && hasMore) {
+      loadData('repositories', currentPage);
+    }
+  };
+
+  // Intersection Observer for infinite scrolling
+  useEffect(() => {
+    if (!repositories.length) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !loading.repositories) {
+          loadMoreRepositories();
+        }
+      },
+      { threshold: 0.5 }
+    );
+
+    const loadMoreTrigger = document.getElementById('load-more-trigger');
+    if (loadMoreTrigger) {
+      observer.observe(loadMoreTrigger);
+    }
+
+    return () => observer.disconnect();
+  }, [repositories, hasMore, loading.repositories]);
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-800 text-gray-100">
@@ -165,10 +234,10 @@ export default function Home() {
                 </div>
                 <button
                   type="submit"
-                  disabled={loading}
+                  disabled={loading.initial}
                   className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-medium py-3 px-4 rounded-lg transition-all disabled:opacity-50 transform hover:scale-[1.02] active:scale-[0.98]"
                 >
-                  {loading ? (
+                  {loading.initial ? (
                     <span className="flex items-center justify-center gap-2">
                       <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
                         <circle
@@ -203,78 +272,44 @@ export default function Home() {
             </div>
 
             {/* Right Column - Results */}
-            <div className="md:col-span-3 relative min-h-[400px] flex items-center justify-center">
-              {loading && <LoadingSkeleton />}
-              {!loading && !stats && (
-                <div className="w-full h-full text-center flex items-center justify-center bg-gray-800/30 border border-purple-500/20 rounded-lg backdrop-blur-sm">
-                  <div className="space-y-4 p-8">
-                    <div className="w-16 h-16 mx-auto bg-gradient-to-r from-purple-500/20 to-pink-500/20 rounded-full flex items-center justify-center">
-                      <svg
-                        className="w-8 h-8 text-gray-400"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                        xmlns="http://www.w3.org/2000/svg"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                        />
-                      </svg>
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-medium text-gray-200 mb-1">
-                        No Stats Found
-                      </h3>
-                      <p className="text-gray-400">
-                        Enter a GitHub username to view API response
-                      </p>
-                    </div>
+            <div className="md:col-span-3 relative min-h-[400px]">
+              {Object.values(loading).some(Boolean) && <LoadingSkeleton />}
+              
+              {basicStats && (
+                <div className="space-y-6">
+                  {/* Basic Stats */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <Tooltip content="Total number of commits made in the current year across all repositories" position="below" showArrow={false}>
+                      <div className="bg-gray-900/50 rounded-lg p-4 backdrop-blur-sm cursor-help">
+                        <div className="text-sm text-gray-400">Total Commits</div>
+                        <div className="text-2xl font-bold text-white">{basicStats.totalCommits}</div>
+                      </div>
+                    </Tooltip>
+
+                    <Tooltip content="Longest consecutive streak of days with at least one contribution" position="below" showArrow={false}>
+                      <div className="bg-gray-900/50 rounded-lg p-4 backdrop-blur-sm cursor-help">
+                        <div className="text-sm text-gray-400">Longest Streak</div>
+                        <div className="text-2xl font-bold text-white">{basicStats.longestStreak} days</div>
+                      </div>
+                    </Tooltip>
+
+                    <Tooltip content="Total number of stars received across all public repositories" position="below" showArrow={false}>
+                      <div className="bg-gray-900/50 rounded-lg p-4 backdrop-blur-sm cursor-help">
+                        <div className="text-sm text-gray-400">Stars Earned</div>
+                        <div className="text-2xl font-bold text-white">{basicStats.starsEarned}</div>
+                      </div>
+                    </Tooltip>
+
+                    <Tooltip content="Your contribution rank compared to all GitHub users based on total commits" position="below" showArrow={false}>
+                      <div className="bg-gray-900/50 rounded-lg p-4 backdrop-blur-sm cursor-help">
+                        <div className="text-sm text-gray-400">Commit Rank</div>
+                        <div className="text-2xl font-bold text-white">{basicStats.commitRank}</div>
+                      </div>
+                    </Tooltip>
                   </div>
-                </div>
-              )}
-              {!loading && stats && (
-                <div className="w-full h-full bg-gray-800/30 border border-purple-500/20 rounded-lg backdrop-blur-sm">
-                  <div className="p-4 border-b border-purple-500/20">
-                    <h2 className="text-lg font-medium text-transparent bg-clip-text bg-gradient-to-r from-purple-200 to-pink-200">
-                      Results for @{username}
-                    </h2>
-                  </div>
-                  <div className="p-4 space-y-8">
-                    {/* Quick Stats */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      <Tooltip content="Total number of commits made in the current year across all repositories" position="below" showArrow={false}>
-                        <div className="bg-gray-900/50 rounded-lg p-4 backdrop-blur-sm cursor-help">
-                          <div className="text-sm text-gray-400">Total Commits</div>
-                          <div className="text-2xl font-bold text-white">{stats.totalCommits}</div>
-                        </div>
-                      </Tooltip>
 
-                      <Tooltip content="Longest consecutive streak of days with at least one contribution" position="below" showArrow={false}>
-                        <div className="bg-gray-900/50 rounded-lg p-4 backdrop-blur-sm cursor-help">
-                          <div className="text-sm text-gray-400">Longest Streak</div>
-                          <div className="text-2xl font-bold text-white">{stats.longestStreak} days</div>
-                        </div>
-                      </Tooltip>
-
-                      <Tooltip content="Total number of stars received across all public repositories" position="below" showArrow={false}>
-                        <div className="bg-gray-900/50 rounded-lg p-4 backdrop-blur-sm cursor-help">
-                          <div className="text-sm text-gray-400">Stars Earned</div>
-                          <div className="text-2xl font-bold text-white">{stats.starsEarned}</div>
-                        </div>
-                      </Tooltip>
-
-                      <Tooltip content="Your contribution rank compared to all GitHub users based on total commits" position="below" showArrow={false}>
-                        <div className="bg-gray-900/50 rounded-lg p-4 backdrop-blur-sm cursor-help">
-                          <div className="text-sm text-gray-400">Commit Rank</div>
-                          <div className="text-2xl font-bold text-white">{stats.commitRank}</div>
-                        </div>
-                      </Tooltip>
-                    </div>
-
-                    {/* Contribution Graph */}
+                  {/* Contribution Graph */}
+                  {contributions && (
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
                         <Tooltip content="Your daily contribution activity over time, including commits, pull requests, and issues" position="below" showArrow={false}>
@@ -284,121 +319,99 @@ export default function Home() {
                         </Tooltip>
                         <Tooltip content="The day of the week when you're most productive, based on average contributions" position="below" showArrow={false}>
                           <div className="text-xs text-gray-400 cursor-help">
-                            Most active: {stats.mostActiveDay.name} ({stats.mostActiveDay.commits} commits/day)
+                            Most active: {basicStats.mostActiveDay.name} ({basicStats.mostActiveDay.commits} commits/day)
                           </div>
                         </Tooltip>
                       </div>
-                      <ContributionGraph data={stats.calendarData} />
+                      <ContributionGraph data={contributions} />
                     </div>
+                  )}
 
-                    {/* Top Languages */}
-                    <div className="bg-gray-900/50 rounded-lg p-4 backdrop-blur-sm">
-                      <Tooltip content="Most frequently used programming languages in your repositories" position="below" showArrow={false}>
-                        <h3 className="text-sm font-medium text-gray-300 mb-3 cursor-help">
-                          Top Languages
-                        </h3>
-                      </Tooltip>
-                      <div className="flex flex-wrap gap-2">
-                        {stats.topLanguages.map((lang) => (
-                          <Tooltip key={lang} content={`One of your most used programming languages`} position="below" showArrow={false}>
-                            <span className="px-3 py-1 rounded-full text-xs font-medium bg-purple-500/10 text-purple-200 border border-purple-500/20 cursor-help">
-                              {lang}
-                            </span>
-                          </Tooltip>
+                  {/* Repository List */}
+                  {repositories.length > 0 && (
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-medium">Repositories</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {repositories.map((repo, index) => (
+                          <div
+                            key={repo.name + index}
+                            className="bg-gray-800/50 rounded-lg p-4"
+                          >
+                            <h4 className="font-medium">{repo.name}</h4>
+                            <div className="text-sm text-gray-400">
+                              ⭐ {repo.stars} stars
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {repo.languages.map((lang: string) => (
+                                <span
+                                  key={lang}
+                                  className="px-2 py-1 text-xs rounded-full bg-purple-500/10 text-purple-200"
+                                >
+                                  {lang}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
                         ))}
                       </div>
+                      {/* Infinite Scroll Trigger */}
+                      <div
+                        id="load-more-trigger"
+                        className="h-10 flex items-center justify-center"
+                      >
+                        {loading.repositories && (
+                          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-purple-500" />
+                        )}
+                      </div>
                     </div>
+                  )}
 
-                    {/* Shareable Badges */}
-                    <div className="bg-gray-900/50 rounded-lg p-4 backdrop-blur-sm">
-                      <div className="flex items-center justify-between mb-3">
-                        <Tooltip content="Share your GitHub stats with these badges" position="below" showArrow={false}>
+                  {/* Network Stats */}
+                  {networkStats && (
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <Tooltip content="Your network stats" position="below" showArrow={false}>
                           <h3 className="text-sm font-medium text-gray-300 cursor-help">
-                            Shareable Badges
+                            Network Stats
                           </h3>
                         </Tooltip>
-                        <Tooltip content="Click the copy button to get the markdown code" position="below" showArrow={false}>
-                          <div className="text-xs text-gray-400 cursor-help flex items-center gap-1">
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                            </svg>
-                            Copy to add to your README
+                        <Tooltip content="Your network rank compared to all GitHub users based on total commits" position="below" showArrow={false}>
+                          <div className="text-xs text-gray-400 cursor-help">
+                            Network Rank: {networkStats.rank}
                           </div>
                         </Tooltip>
                       </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div className="flex flex-wrap gap-2">
                         <StatBadge
                           label="Total Commits"
-                          value={stats.totalCommits}
+                          value={networkStats.totalCommits}
                           color="purple"
                         />
                         <StatBadge
                           label="Commit Streak"
-                          value={`${stats.longestStreak} days`}
+                          value={`${networkStats.longestStreak} days`}
                           color="green"
                         />
                         <StatBadge
                           label="GitHub Stars"
-                          value={stats.starsEarned}
+                          value={networkStats.starsEarned}
                           color="orange"
                         />
                         <StatBadge
                           label="Commit Rank"
-                          value={stats.commitRank}
+                          value={networkStats.commitRank}
                           color="blue"
                         />
                       </div>
                     </div>
+                  )}
+                </div>
+              )}
 
-                    {/* Leaderboards Link */}
-                    <Link
-                      href={`/leaderboards?username=${username}`}
-                      className="block bg-gray-900/50 rounded-lg p-4 backdrop-blur-sm border border-gray-700/50 hover:border-purple-500/20 transition-colors group"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-lg bg-gradient-to-r from-purple-500/10 to-pink-500/10 flex items-center justify-center">
-                            <svg className="w-5 h-5 text-gray-400 group-hover:text-purple-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                            </svg>
-                          </div>
-                          <div>
-                            <h3 className="text-sm font-medium text-gray-300 group-hover:text-white">View Network Rankings</h3>
-                            <p className="text-xs text-gray-400">Compare your stats with followers and following</p>
-                          </div>
-                        </div>
-                        <svg className="w-5 h-5 text-gray-400 group-hover:text-purple-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                        </svg>
-                      </div>
-                    </Link>
-
-                    {/* Stats JSON View */}
-                    <div className="overflow-hidden rounded-lg bg-gray-900/50 backdrop-blur-sm">
-                      <Tooltip content="Complete data response from the API in JSON format" position="below" showArrow={false}>
-                        <div className="p-4 border-b border-gray-700/50 cursor-help">
-                          <h3 className="text-sm font-medium text-gray-300">Raw Data</h3>
-                        </div>
-                      </Tooltip>
-                      <div className="p-4">
-                        <ReactJson
-                          src={stats}
-                          theme="tomorrow"
-                          style={{
-                            backgroundColor: "transparent",
-                            fontFamily:
-                              'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-                            fontSize: "0.875rem",
-                          }}
-                          enableClipboard={false}
-                          displayDataTypes={false}
-                          displayObjectSize={false}
-                          collapsed={1}
-                          name={false}
-                        />
-                      </div>
-                    </div>
-                  </div>
+              {/* Error Message */}
+              {error && (
+                <div className="bg-red-900/20 border border-red-500/20 text-red-400 px-4 py-3 rounded-lg">
+                  {error}
                 </div>
               )}
             </div>
